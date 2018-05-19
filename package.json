@@ -1,0 +1,12 @@
+{
+  "name": "pwa-life-moments",
+  "version": "1.0.0",
+  "description": "Progressive Web App to share awesome moments from your life",
+  "main": "index.js",
+  "scripts": {
+    "start": "http-server -c-1"
+  },
+  "devDependencies": {
+    "http-server": "^0.10.0"
+  }
+}
