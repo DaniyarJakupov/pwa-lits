@@ -2,9 +2,7 @@
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("/service-worker.js")
-    .then(registration => {
-      console.log("Registered!", registration);
-    })
+    .then(registration => {})
     .catch(error => {
       console.log("Something went terribly wrong! 😬", error);
     });
