@@ -1,5 +1,5 @@
 /* CACHE Setup */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 1;
 const CACHE_PREFIX = `CACHE-v${CACHE_VERSION}`;
 const ALL_CACHES = {
   static: cacheName("STATIC"), // [STATIC_ASSETS]
@@ -9,6 +9,7 @@ const ALL_CACHES_LIST = Object.keys(ALL_CACHES).map(k => ALL_CACHES[k]);
 const STATIC_ASSETS = [
   "/",
   "/index.html",
+  "/fallback.html",
   "/src/js/app.js",
   "/src/js/feed.js",
   "/src/js/material.min.js",
@@ -53,7 +54,7 @@ self.addEventListener("fetch", event => {
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
     caches
-      // Firstly, check static cache
+      // Firstly, check static cache [Cache With Network Fallback]
       .match(event.request, { cacheName: ALL_CACHES.static })
       .then(response => {
         // If assets are found, return them from the cache
@@ -62,8 +63,14 @@ self.addEventListener("fetch", event => {
         if (isAPI && event.request.method === "GET") {
           return fetchDynamicData(event);
         } else {
-          // Else make a request
-          return fetch(event.request);
+          return fetch(event.request).catch(() => {
+            return caches.open(ALL_CACHES.static).then(cache => {
+              // If html not found, serve fallback.html
+              if (event.request.url.indexOf(".html")) {
+                return cache.match("/fallback.html");
+              }
+            });
+          });
         }
       })
   );
@@ -78,6 +85,7 @@ function precacheStaticAssets(assets) {
   });
 }
 
+// Cache Then Network Technique
 function fetchDynamicData(fetchEvent) {
   // Open dynamic cache, then
   return caches.open(ALL_CACHES.dynamic).then(cache => {
