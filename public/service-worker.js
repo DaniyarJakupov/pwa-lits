@@ -55,7 +55,6 @@ self.addEventListener("fetch", event => {
     event.request.headers.get("accept").indexOf("text/html") !== -1;
   let isLocal = new URL(event.request.url).origin === location.origin;
 
-  console.log(isHTMLRequest);
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
     // Firstly, check static cache [Cache With Network Fallback]
