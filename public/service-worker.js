@@ -51,12 +51,15 @@ self.addEventListener("fetch", event => {
   //  Check if the client makes an API call to 3rd parties
   let isAPI = requestUrl.origin.indexOf("localhost:8080") == -1;
   // Check if client requests html page
-  let isHTML = event.request.headers.get("accept").includes("text/html");
+  let isHTMLRequest =
+    event.request.headers.get("accept").indexOf("text/html") !== -1;
+  let isLocal = new URL(event.request.url).origin === location.origin;
 
+  console.log(isHTMLRequest);
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
+    // Firstly, check static cache [Cache With Network Fallback]
     caches
-      // Firstly, check static cache [Cache With Network Fallback]
       .match(event.request, { cacheName: ALL_CACHES.static })
       .then(response => {
         // If assets are found, return them from the cache
@@ -67,11 +70,11 @@ self.addEventListener("fetch", event => {
         } else {
           return fetch(event.request).catch(() => {
             // If html not found, serve fallback.html
-            return caches.open(ALL_CACHES.static).then(cache => {
-              if (isHTML) {
+            if (isHTMLRequest && isLocal) {
+              return caches.open(ALL_CACHES.static).then(cache => {
                 return cache.match("/fallback.html");
-              }
-            });
+              });
+            }
           });
         }
       })
