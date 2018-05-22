@@ -50,6 +50,8 @@ self.addEventListener("fetch", event => {
   let requestUrl = new URL(event.request.url);
   //  Check if the client makes an API call to 3rd parties
   let isAPI = requestUrl.origin.indexOf("localhost:8080") == -1;
+  // Check if client requests html page
+  let isHTML = event.request.headers.get("accept").includes("text/html");
 
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
@@ -64,9 +66,9 @@ self.addEventListener("fetch", event => {
           return fetchDynamicData(event);
         } else {
           return fetch(event.request).catch(() => {
+            // If html not found, serve fallback.html
             return caches.open(ALL_CACHES.static).then(cache => {
-              // If html not found, serve fallback.html
-              if (event.request.url.indexOf(".html")) {
+              if (isHTML) {
                 return cache.match("/fallback.html");
               }
             });
