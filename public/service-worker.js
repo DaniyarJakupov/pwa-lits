@@ -3,7 +3,8 @@ const CACHE_VERSION = 1;
 const CACHE_PREFIX = `CACHE-v${CACHE_VERSION}`;
 const ALL_CACHES = {
   static: cacheName("STATIC"), // [STATIC_ASSETS]
-  dynamic: cacheName("DYNAMIC") // [Data from API calls]
+  dynamic: cacheName("DYNAMIC"), // [Data from API calls]
+  images: cacheName("IMAGES") // [FETCHED IMAGES]
 };
 const ALL_CACHES_LIST = Object.keys(ALL_CACHES).map(k => ALL_CACHES[k]);
 const STATIC_ASSETS = [
@@ -54,6 +55,8 @@ self.addEventListener("fetch", event => {
   let isHTMLRequest =
     event.request.headers.get("accept").indexOf("text/html") !== -1;
   let isLocal = new URL(event.request.url).origin === location.origin;
+  // Check if the client requests image
+  let isImage = acceptHeader.indexOf("image") >= 0;
 
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
@@ -64,8 +67,11 @@ self.addEventListener("fetch", event => {
         // If assets are found, return them from the cache
         if (response) return response;
         // If client makes API calls to 3rd parties, cache responses (json, etc)
-        if (isAPI && event.request.method === "GET") {
+        if (isAPI && event.request.method === "GET" && !isImage) {
           return fetchDynamicData(event);
+        } else if (isImage && isAPI) {
+          // If client requests image
+          return fetchImageOrFallback(event);
         } else {
           return fetch(event.request).catch(() => {
             // If html not found, serve fallback.html
@@ -82,7 +88,6 @@ self.addEventListener("fetch", event => {
 
 /* ==================================================================================== */
 /* ============================================ HELPER FUNCTIONS ====================== */
-
 function precacheStaticAssets(assets) {
   return caches.open(ALL_CACHES.static).then(cache => {
     cache.addAll(assets);
@@ -91,9 +96,8 @@ function precacheStaticAssets(assets) {
 
 // Cache Then Network Technique
 function fetchDynamicData(fetchEvent) {
-  // Open dynamic cache, then
+  // Open dynamic cache, then fetch
   return caches.open(ALL_CACHES.dynamic).then(cache => {
-    // fetch what you need from the server
     return fetch(fetchEvent.request)
       .then(response => {
         // Clone the response and put its copy to the cache
@@ -109,6 +113,45 @@ function fetchDynamicData(fetchEvent) {
         // IF network fails, serve from the cache
         return cache.match(fetchEvent.request);
       });
+  });
+}
+
+function fetchImageOrFallback(fetchEvent) {
+  // Fetch images
+  return fetch(fetchEvent.request, {
+    mode: "cors",
+    credentials: "omit" // in case CORS wildcard headers are present
+  })
+    .then(response => {
+      // Clone the response
+      let clonedResponse = response.clone();
+      // IF response without image, get image from static cache
+      if (!response.ok) {
+        return fetchFallbackImg();
+      }
+      // Else, cache and resolve promise with the original response
+      caches.open(ALL_CACHES.images).then(cache => {
+        if (response.ok) {
+          cache.put(fetchEvent.request, clonedResponse);
+        }
+      });
+      return response;
+    })
+    .catch(() => {
+      // IF network fails, go to images cache
+      return caches
+        .match(fetchEvent.request, {
+          cacheName: ALL_CACHES.images
+        })
+        .then(response => {
+          return response || fetchFallbackImg(fetchEvent.request);
+        });
+    });
+}
+
+function fetchFallbackImg() {
+  return caches.open(ALL_CACHES.static).then(cache => {
+    return cache.match("/src/images/sf-boat.jpg");
   });
 }
 
