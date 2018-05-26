@@ -1,3 +1,6 @@
+// Add idb package 
+importScripts("/src/js/idb.js");
+
 /* CACHE Setup */
 const CACHE_VERSION = 1;
 const CACHE_PREFIX = `CACHE-v${CACHE_VERSION}`;
@@ -12,6 +15,7 @@ const STATIC_ASSETS = [
   "/index.html",
   "/fallback.html",
   "/src/js/app.js",
+  "/src/js/idb.js",
   "/src/js/feed.js",
   "/src/js/material.min.js",
   "/src/css/app.css",
@@ -34,7 +38,10 @@ self.addEventListener("install", event => {
   event.waitUntil(
     Promise.all([
       // Fetch STATIC_ASSETS, then populate the static cache
-      precacheStaticAssets(STATIC_ASSETS)
+      precacheStaticAssets(STATIC_ASSETS),
+
+      // Populate IndexedDB with posts from firebase
+      fetchPosts()
     ])
   );
 });
@@ -176,5 +183,37 @@ function removeUnusedCaches(cacheNamesToKeep) {
     } else {
       return Promise.resolve();
     }
+  });
+}
+/* ==================================================================================== */
+// ===================================== IndexedDB ===================================== //
+function postsDb() {
+  // Create postsDB and posts object store
+  return idb.open("postsDB", 1, upgradeDb => {
+    switch (upgradeDb.oldVersion) {
+      case 0:
+        upgradeDb.createObjectStore("posts", { keyPath: "id" });
+    }
+  });
+}
+function fetchPosts() {
+  // Open DB
+  return postsDb().then(db => {
+    // Fetch posts from firebase
+    fetch("https://pwa-lits.firebaseio.com/posts.json")
+      .then(response => response.json())
+      .then(posts => {
+        // Clear posts store when new SW is installed
+        let tx = db.transaction("posts", "readwrite");
+        tx.objectStore("posts").clear();
+        tx.complete.then(() => {
+          // Populate posts store with fetched grocery items
+          let txx = db.transaction("posts", "readwrite");
+          posts.forEach(item => {
+            txx.objectStore("posts").put(item);
+          });
+          return txx.complete;
+        });
+      });
   });
 }
