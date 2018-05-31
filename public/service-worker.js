@@ -1,5 +1,6 @@
-// Add idb package 
+// Add idb package
 importScripts("/src/js/idb.js");
+importScripts("/src/js/utils.js");
 
 /* CACHE Setup */
 const CACHE_VERSION = 1;
@@ -17,6 +18,7 @@ const STATIC_ASSETS = [
   "/src/js/app.js",
   "/src/js/idb.js",
   "/src/js/feed.js",
+  "/src/js/utils.js",
   "/src/js/material.min.js",
   "/src/css/app.css",
   "/src/css/feed.css",
@@ -38,10 +40,7 @@ self.addEventListener("install", event => {
   event.waitUntil(
     Promise.all([
       // Fetch STATIC_ASSETS, then populate the static cache
-      precacheStaticAssets(STATIC_ASSETS),
-
-      // Populate IndexedDB with posts from firebase
-      fetchPosts()
+      precacheStaticAssets(STATIC_ASSETS)
     ])
   );
 });
@@ -64,6 +63,9 @@ self.addEventListener("fetch", event => {
   let isLocal = new URL(event.request.url).origin === location.origin;
   // Check if the client requests image
   let isImage = acceptHeader.indexOf("image") >= 0;
+  // Check if client requests posts from firebase
+  const postsURL = "https://pwa-lits.firebaseio.com/posts.json";
+  let isPosts = event.request.url.indexOf(postsURL) !== -1;
 
   /* Implementation of diff cache strategies depending on a client request */
   event.respondWith(
@@ -73,7 +75,11 @@ self.addEventListener("fetch", event => {
       .then(response => {
         // If assets are found, return them from the cache
         if (response) return response;
-        // If client makes API calls to 3rd parties, cache responses (json, etc)
+        // IF clients requests posts.json, clone the response to IndexedDB
+        if (isPosts) {
+          return fetchPostsJson(event);
+        }
+        // If client makes API calls to 3rd parties, cache responses
         if (isAPI && event.request.method === "GET" && !isImage) {
           return fetchDynamicData(event);
         } else if (isImage && isAPI) {
@@ -120,6 +126,25 @@ function fetchDynamicData(fetchEvent) {
         // IF network fails, serve from the cache
         return cache.match(fetchEvent.request);
       });
+  });
+}
+
+function fetchPostsJson(fetchEvent) {
+  return fetch(fetchEvent.request).then(response => {
+    // Fetch posts.json and clone it
+    let clonedResponse = response.clone();
+    if (response.ok) {
+      // Clear posts store, then repopulate it
+      clearDB("posts").then(() => {
+        clonedResponse.json().then(posts => {
+          posts.forEach(post => {
+            writeDataToDB("posts", post);
+          });
+        });
+      });
+    }
+    // Return fetched posts.json
+    return response;
   });
 }
 
@@ -183,37 +208,5 @@ function removeUnusedCaches(cacheNamesToKeep) {
     } else {
       return Promise.resolve();
     }
-  });
-}
-/* ==================================================================================== */
-// ===================================== IndexedDB ===================================== //
-function postsDb() {
-  // Create postsDB and posts object store
-  return idb.open("postsDB", 1, upgradeDb => {
-    switch (upgradeDb.oldVersion) {
-      case 0:
-        upgradeDb.createObjectStore("posts", { keyPath: "id" });
-    }
-  });
-}
-function fetchPosts() {
-  // Open DB
-  return postsDb().then(db => {
-    // Fetch posts from firebase
-    fetch("https://pwa-lits.firebaseio.com/posts.json")
-      .then(response => response.json())
-      .then(posts => {
-        // Clear posts store when new SW is installed
-        let tx = db.transaction("posts", "readwrite");
-        tx.objectStore("posts").clear();
-        tx.complete.then(() => {
-          // Populate posts store with fetched grocery items
-          let txx = db.transaction("posts", "readwrite");
-          posts.forEach(item => {
-            txx.objectStore("posts").put(item);
-          });
-          return txx.complete;
-        });
-      });
   });
 }
