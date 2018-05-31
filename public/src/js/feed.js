@@ -51,18 +51,42 @@ function createCard(post) {
   sharedMomentsArea.appendChild(cardWrapper);
 }
 
+function clearCards() {
+  while (sharedMomentsArea.hasChildNodes()) {
+    sharedMomentsArea.removeChild(sharedMomentsArea.lastChild);
+  }
+}
+
 function updateUi(posts) {
+  clearCards();
   posts.map(post => {
     createCard(post);
   });
 }
 
+var firebaseDataFetched = false;
+
+// Fetch posts from firebase
 (async function fetchPosts() {
-  let res = await fetch("https://pwa-lits.firebaseio.com/posts.json");
-  let data = await res.json();
-  let dataArray = [];
-  for (let prop in data) {
-    dataArray.push(data[prop]);
+  try {
+    let res = await fetch("https://pwa-lits.firebaseio.com/posts.json");
+    let data = await res.json();
+    firebaseDataFetched = true;
+    let dataArray = [];
+    for (let prop in data) {
+      dataArray.push(data[prop]);
+    }
+    updateUi(dataArray);
+  } catch (e) {
+    firebaseDataFetched = false;
   }
-  updateUi(dataArray);
 })();
+
+// Use posts.json from IndexedDB if data from firebase is not fetched
+if ("indexedDB" in window) {
+  if (!firebaseDataFetched) {
+    readDataFromDB("posts").then(data => {
+      updateUi(data);
+    });
+  }
+}
